@@ -7,9 +7,7 @@ import hashlib
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 try:
-    s.connect(('10.0.0.19', 1234))
-    msg = s.recv(1024)
-    print(msg.decode("utf-8"))
+    s.connect((socket.gethostname(), 1234))
 
 except Exception as e:
     print(f"An error occurred: {e}")
@@ -32,11 +30,11 @@ except Exception as e:
     print(e)
 
     f = open(file_path, 'w')
-    # name = input("Enter your full name: ")
-    # password = input("Enter password: ")
+    name = input("Enter your full name: ")
+    password = input("Enter password: ")
 
-    hash = hashlib.sha256()
-    hash.update(b"{password}")
+    #hash = hashlib.sha256()
+    #hash.update(b"{password}")
     data = {
         'Header': {
             'Client ID': '',
@@ -46,7 +44,7 @@ except Exception as e:
         },
         'Payload': {
             'Name': name,
-            'Password': hash.digest
+            'Password': password
         }
     }
 
@@ -54,12 +52,13 @@ except Exception as e:
     
     
 
-    # s.send(bytes(json.dumps(data), "utf-8"))
-    # msg = s.recv(1024)
-    # f.write(name)
-    # f.write('\n')
-    # print(msg.decode("utf-8"))
-    # f.write(msg.decode("utf-8"))
+    s.send(bytes(json.dumps(data), "utf-8"))
+    
+    msg = s.recv(1024)
+    f.write(name)
+    f.write('\n')
+    print(msg.decode("utf-8"))
+    f.write(msg.decode("utf-8"))
 
 
 
