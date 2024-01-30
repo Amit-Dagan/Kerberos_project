@@ -21,7 +21,7 @@ file_name = 'me.info'
 file_path = os.path.join(current_directory, file_name)
     
 try:
-    #1/0
+    1/0
     f = open(file_path, 'r')
     name = f.readline()
     id = f.readline()
