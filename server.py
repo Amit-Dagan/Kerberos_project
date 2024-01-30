@@ -16,10 +16,25 @@ def main():
         data = json.loads(msg.decode('utf-8'))
         print(data)
         if data['Header']['Code'] == 1024:
+            #
             id = uuid.uuid4()
             id_str = str(id)
-            clientsocket.send(bytes(id_str, "utf-8"))
 
+            msg_return = {
+                'Header': {
+                    'Version': 24,
+                    'Code': 1600,
+                    'Payload Size': 4
+                },
+                'Payload': {
+                    'ClientID': id_str
+                }
+            }
+            clientsocket.send(bytes(json.dumps(data), "utf-8"))
+
+        
+
+        
 
 def sign_up(name):
     #check if the name is in clients
