@@ -59,7 +59,7 @@ def main():
                     'PasswordHash': data['Payload']['Password'],
                     'LastSeen': 1
                 }
-                with open(clients_path, 'w+') as clients_file:
+                with open(clients_path, 'a') as clients_file:
                     user_str = f"{id_str}:{data['Payload']['Name']}:{data['Payload']['Password']}:{1}\n"
                     clients_file.write(user_str)
 

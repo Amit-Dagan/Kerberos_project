@@ -26,7 +26,7 @@ try:
     name = f.readline()
     id = f.readline()
     print(f"name = {name}id = {id}")
-
+    #login
 
 except Exception as e:
     print(e)
@@ -37,6 +37,7 @@ except Exception as e:
 
     #hash = hashlib.sha256()
     #hash.update(b"{password}")
+
     SIGN_UP_CODE = 1024
 
     data = {
