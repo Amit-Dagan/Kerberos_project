@@ -1,8 +1,17 @@
+import random
 import socket
-import json
-import os
+import struct
+import sys
 import uuid
 import hashlib
+import os
+from Crypto.Random import get_random_bytes
+
+current_directory = os.path.dirname(os.path.abspath(__file__))
+file_name = 'me.info'
+file_path = os.path.join(current_directory, file_name)
+
+VERSION = 24
 
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -13,87 +22,71 @@ except Exception as e:
     print(f"An error occurred: {e}")
 
 
-name = ""
-id = ""
+def main():
+    try:
+        with open(file_path, 'r') as file:
+            sign_in()
 
-current_directory = os.path.dirname(os.path.abspath(__file__))
-file_name = 'me.info'
-file_path = os.path.join(current_directory, file_name)
-    
-try:
-    1/0
-    f = open(file_path, 'r')
-    name = f.readline()
-    id = f.readline()
-    print(f"name = {name}id = {id}")
-    #login
+        
+    except FileNotFoundError:
+        sign_up()
+        
+        sign_in()
 
-except Exception as e:
-    print(e)
+    except Exception as e:
+        print('error')
 
+    request_key()
+
+
+
+
+def create_file():
+    print('creating file')
     f = open(file_path, 'w')
-    name = input("Enter your full name: ")
+    f.close
+
+
+def sign_in():
+    print('sign_in')
+
+def sign_up():
+    print('sign_up')
+
+    #create_file()
+    
+    code = 1024  # Registration code
+    name = input("Enter your full name: ") + '\x00'
+    # TODO if name longer then 255 bytes ask again!
+
     password = input("Enter password: ")
+    # TODO if password longer then 255 bytes ask again!
 
-    #hash = hashlib.sha256()
-    #hash.update(b"{password}")
+    password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest() + '\x00'
+    #print(password_hash)
 
-    SIGN_UP_CODE = 1024
+    password_hash_bytes = password_hash.encode('utf-8')
+    name_bytes = name.encode('utf-8')  # Convert to bytes
+    client_id = get_random_bytes(16)
 
-    data = {
-        'Header': {
-            'Client ID': '',
-            'Version': 24,
-            'Code': SIGN_UP_CODE,
-            'Payload Size': 4
-        },
-        'Payload': {
-            'Name': name,
-            'Password': password
-        }
-    }
+    payload_size = 255*2
 
+    data = struct.pack(f'16sBHI255s255s', client_id, VERSION, code, payload_size, name_bytes, password_hash_bytes)
     print(data)
-    
-    
 
-    s.send(bytes(json.dumps(data), "utf-8"))
-    
-    msg = s.recv(1024)
+    s.sendall(data)
+    s.listen
+    print(s.recv(1024))
 
-    server_res = json.loads(msg.decode('utf-8'))
-
-    if(server_res['Header']['Code'] == 1600):
-
-        f.write(name)
-        f.write('\n')
-        print(msg.decode("utf-8"))
-        f.write(msg.decode("utf-8"))
-
-    
-
-#-------------LOGIN---------------
-    
-# def login(name, password):
-#     data_construct(None, 1025, {'name': name, ''})
-    
-#     #s.send    
-#     return
-
-def data_construct(id, code, payload):
-    data = {
-        'Header': {
-            'Client ID': id,
-            'Version': 24,
-            'Code': code,
-            'Payload Size': 4
-        },
-        'Payload': payload
-    }
 
     return data
 
 
 
-s.close()
-f.close()
+def request_key():
+    print('requesting key')
+
+
+
+if __name__ == "__main__":
+    main()
