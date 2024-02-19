@@ -97,13 +97,3 @@ def data_construct(id, code, payload):
 
 s.close()
 f.close()
-
-
-
-
-
-
-
-
-
-
