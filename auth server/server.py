@@ -56,7 +56,7 @@ def main():
                     case 1026:
                         get_servers()
                     case 1027:
-                        get_key()
+                        get_key(client_data[HEADER_SIZE:], client_socket)
 
                 client_socket.close()
 
@@ -73,34 +73,53 @@ def user_sign_up(payload, client_socket):
     print(password_hash, name)
     clients_name_list = load_clients_id_list()
 
-    if (name in clients_name_list):
-        response_code = 1601
-        print(response_code)
-    else:
-        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        id = get_random_bytes(16)
-        id_hex = binascii.hexlify(id).decode()
+    if (name not in clients_name_list):
+        
         try:
             with open(CLIENTS_FILE, 'a') as clients_file:
-
-                #client_id = get_random_bytes(16)
+                current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                id = get_random_bytes(16)
+                id_hex = binascii.hexlify(id).decode()
                 clients_file.write(f'{id_hex}:{name}:{password_hash}:{current_time}\n')
                 response_code = 1600
-                print("Registration successful (1600).")
+                
+                data = struct.pack(f'BHI16s', VERSION, response_code, 16, id)
+                client_socket.sendall(data)
+                return
 
         except Exception as e:
-            response_code = 1601
-            print(f"Registration not successful (1601). Error: {str(e)}")
-            client_socket.sendall(struct.pack('H', response_code))
-
-def user_sign_in():
-    print('sign in')
+            print(e)
+    else:
+        print('1601')
+    response_code = 1601
+    data = struct.pack(f'BHI', VERSION, response_code, 0)
+    client_socket.sendall(data)
 
 def server_sign_up():
     print('sign up')
 
-def get_key():
+def get_key(payload, client_socket):
+    
+    payload_format = '16s8s'
+    msg_server_id, nounce = struct.unpack(payload_format, payload)
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    msg_server_key = get_random_bytes(32)
+    key = get_random_bytes(16)
+
+
+    cipher = AES.new(key, AES.MODE_CBC)
+    ct_bytes1 = cipher.encrypt(pad(data, AES.block_size))
+    iv = b64encode(cipher.iv).decode('utf-8')
+    ct1 = b64encode(ct_bytes1).decode('utf-8')
+
+
+    encrypted_key  = struct.pack(f'16s3s32s', iv, )
+
+
+
+
     print('get key')
+
 
 def get_servers():
     print('get servers list')
