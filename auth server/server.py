@@ -1,5 +1,6 @@
 import base64
 import binascii
+import hashlib
 import socket
 import struct
 import uuid
@@ -8,7 +9,7 @@ import datetime
 import os
 from base64 import b64encode
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import pad
+from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
 
 VERSION = 24
@@ -26,40 +27,40 @@ def main():
     port = read_server_port()
     msg_servers = load_message_server_details()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-            server_socket.bind((socket.gethostname(), port))
-            server_socket.listen()
-            print(f"Server listening on port {port}...")
-            
-            while True:
-                client_socket, addr = server_socket.accept()
-                print(f"Connection from {addr}")
-                client_data = client_socket.recv(1024) 
+        server_socket.bind((socket.gethostname(), port))
+        server_socket.listen()
+        print(f"Server listening on port {port}...")
+        
+        while True:
 
-                client_id, version, code, payload_size = struct.unpack(HEADER_FORMAT, client_data[:HEADER_SIZE])
-                if(version != VERSION):
-                    #TODO check if works
-                    continue
+            client_socket, addr = server_socket.accept()
+            print(f"Connection from {addr}")
+            client_data = client_socket.recv(1024) 
 
-                if(len(client_data[HEADER_SIZE:]) != payload_size):
-                    print(f"len of client_data[HEADER_SIZE:] = {len(client_data[HEADER_SIZE:])} ")
-                    print(f"len of payload_size = {payload_size}")
-                    print('not the same size')
-                    #TODO check if works
-                    continue
+            client_id, version, code, payload_size = struct.unpack(HEADER_FORMAT, client_data[:HEADER_SIZE])
+            if(version != VERSION):
+                #TODO check if works
+                continue
+
+            if(len(client_data[HEADER_SIZE:]) != payload_size):
+                print(f"len of client_data[HEADER_SIZE:] = {len(client_data[HEADER_SIZE:])} ")
+                print(f"len of payload_size = {payload_size}")
+                print('not the same size')
+                #TODO check if works
+                continue
 
 
-                match code:
-                    case 1024:
-                        user_sign_up(client_data[HEADER_SIZE:], client_socket)
-                    case 1025:
-                        server_sign_up()
-                    case 1026:
-                        get_servers()
-                    case 1027:
-                        get_key(client_data[HEADER_SIZE:], client_socket)
+            match code:
+                case 1024:
+                    user_sign_up(client_data[HEADER_SIZE:], client_socket)
+                case 1025:
+                    server_sign_up()
+                case 1026:
+                    get_servers()
+                case 1027:
+                    get_key(client_id, client_data[HEADER_SIZE:], client_socket)
 
-                client_socket.close()
-
+            client_socket.close
 
 
 
@@ -94,31 +95,58 @@ def user_sign_up(payload, client_socket):
     response_code = 1601
     data = struct.pack(f'BHI', VERSION, response_code, 0)
     client_socket.sendall(data)
+    
 
 def server_sign_up():
     print('sign up')
 
-def get_key(payload, client_socket):
+
+
+
+def get_key(client_id, payload, client_socket):
     
+
     payload_format = '16s8s'
-    msg_server_id, nounce = struct.unpack(payload_format, payload)
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    msg_server_id, nonce = struct.unpack(payload_format, payload)
+
     msg_server_key = get_random_bytes(32)
-    key = get_random_bytes(16)
+    password_hash = hashlib.sha256('1234'.encode('utf-8')).digest()
+    client_key = password_hash
+    code = 1027
+
+    encrypted_key_headers = '16s16s32s'
+    ticket_headers = 'B16s16s8s16s32s8s'
+    data_headers = f'16s{struct.calcsize(encrypted_key_headers)}s{struct.calcsize(ticket_headers)}s'
 
 
-    cipher = AES.new(key, AES.MODE_CBC)
-    ct_bytes1 = cipher.encrypt(pad(data, AES.block_size))
-    iv = b64encode(cipher.iv).decode('utf-8')
-    ct1 = b64encode(ct_bytes1).decode('utf-8')
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").encode()
+    aes_key = get_random_bytes(32)
 
+    print(data_headers)
 
-    encrypted_key  = struct.pack(f'16s3s32s', iv, )
+    client_cipher = AES.new(client_key, AES.MODE_CBC)
+    encrypted_nonce = client_cipher.encrypt(pad(nonce, AES.block_size))
+    user_encrypted_key = client_cipher.encrypt(pad(aes_key, AES.block_size))
+    
 
+    client_iv = client_cipher.iv
 
+    msg_cipher = AES.new(msg_server_key, AES.MODE_CBC)
+    msg_encrypted_key = msg_cipher.encrypt(pad(aes_key, AES.block_size))
+    expiration_time = msg_cipher.encrypt(pad(current_time, AES.block_size))
 
+    ticket_iv = msg_cipher.iv
+    msg_encrypted_key = aes_key
+
+    encrypted_key = struct.pack(encrypted_key_headers, client_iv, encrypted_nonce, user_encrypted_key)
+    ticket = struct.pack(ticket_headers, 24, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, current_time)
+    data = struct.pack(data_headers, client_id ,encrypted_key, ticket)
+    print(data)
 
     print('get key')
+    client_socket.sendall(data)
+
+    return
 
 
 def get_servers():
