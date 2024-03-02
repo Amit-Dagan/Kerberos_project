@@ -14,15 +14,13 @@ file_path = os.path.join(current_directory, file_name)
 VERSION = 24
 HEADER_FORMAT = 'BHI'
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
-client_id = ''
 
 def main():
     try:
         with open(file_path, 'r') as file:
             name = file.readline()
             client_id = file.readline()
-            print('client id = ', client_id)
-
+    
 
     except FileNotFoundError:
         while (not sign_up()): 
@@ -32,15 +30,37 @@ def main():
     except Exception as e:
         print(f'error: {e}')
 
-    data = request_key()
+
+    data = request_key(client_id)
     print(data)
 
+    s = connect_to_msg_server()
+
+    chat(s, data, client_id)
 
     #chat with massage server
         
 
 
+def connect_to_msg_server():
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+    try:
+        s.connect(('127.0.0.1', 1235))
+        return s
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+    
+    return None
+
+    print("connect_to_msg_server")
+
+def chat(s, dict_data, client_id):
+    print(client_id)
+    print(dict_data['ticket'])
+    s.sendall(dict_data['ticket'])
+    print("chat")
 
 def connect_to_auth_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -53,7 +73,6 @@ def connect_to_auth_server():
         print(f"An error occurred: {e}")
     
     return None
-
 
 def create_file():
     print('creating file')
@@ -70,15 +89,11 @@ def sign_up():
         return None
 
     code = 1024  # Registration code
-    name = input("Enter your full name: ")
-    # TODO if name longer then 255 bytes ask again!
 
-    password = input("Enter password: ")
-    # TODO if password longer then 255 bytes ask again!
+    name = valid_input('Enter a name')
+    password = valid_input("Enter password: ")
 
     password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
-    #print(password_hash)
-
     password_hash_bytes = password_hash.encode('utf-8')
     name_bytes = name.encode('utf-8')  # Convert to bytes
     client_id = get_random_bytes(16)
@@ -86,7 +101,6 @@ def sign_up():
     payload_size = 255*2
 
     data = struct.pack(f'16sBHI255s255s', client_id, VERSION, code, payload_size, name_bytes, password_hash_bytes)
-    #print(data)
 
     s.sendall(data)
     s.listen
@@ -94,7 +108,6 @@ def sign_up():
     s.close
 
     version, code, payload_size = struct.unpack(HEADER_FORMAT, server_answer[:HEADER_SIZE])
-    #print(server_answer)
 
     if(code == 1600):
         create_file()
@@ -119,10 +132,9 @@ def sign_up():
     
     return False
 
-
-
-def request_key():
+def request_key(client_id):
     print('requesting key')
+    print('client id = ', client_id)
 
     s = connect_to_auth_server()
     if(s == None):
@@ -167,6 +179,15 @@ def request_key():
     except Exception as e:
         print(e)
     return {'ticket': ticket, 'key': decrypted_aes_key}
+
+def valid_input(str):
+    
+    user_input = input(str).strip()
+    while (len(user_input) > 255):
+        user_input = input("please enter less then 255 characters").strip()
+    return user_input
+
+
 
 
 

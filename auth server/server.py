@@ -20,10 +20,14 @@ CLIENTS_FILE = 'clients'
 
 HEADER_FORMAT = '16sBHI'
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
-
+clients_name_list = []
+clients_dict = {}
 
 def main():
-    print('main')
+    
+    clients_dict = load_clients_dict()
+    load_clients_name_list()
+    print(clients_name_list)
     port = read_server_port()
     msg_servers = load_message_server_details()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
@@ -38,6 +42,7 @@ def main():
             client_data = client_socket.recv(1024) 
 
             client_id, version, code, payload_size = struct.unpack(HEADER_FORMAT, client_data[:HEADER_SIZE])
+            print('handeling id: ', client_id)
             if(version != VERSION):
                 #TODO check if works
                 continue
@@ -72,18 +77,20 @@ def user_sign_up(payload, client_socket):
     name = name.rstrip(b'\x00').decode('utf-8')
     password_hash = password_hash.rstrip(b'\x00').decode('utf-8')
     print(password_hash, name)
-    clients_name_list = load_clients_id_list()
-
+    print(f'name is {name} \n {clients_name_list}')
     if (name not in clients_name_list):
-        
         try:
             with open(CLIENTS_FILE, 'a') as clients_file:
                 current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 id = get_random_bytes(16)
+                while(id in clients_dict):
+                    id = get_random_bytes(16)
+
                 id_hex = binascii.hexlify(id).decode()
                 clients_file.write(f'{id_hex}:{name}:{password_hash}:{current_time}\n')
+                clients_dict[id] =  password_hash
+                clients_name_list.append(name)
                 response_code = 1600
-                
                 data = struct.pack(f'BHI16s', VERSION, response_code, 16, id)
                 client_socket.sendall(data)
                 return
@@ -99,8 +106,6 @@ def user_sign_up(payload, client_socket):
 
 def server_sign_up():
     print('sign up')
-
-
 
 
 def get_key(client_id, payload, client_socket):
@@ -141,7 +146,7 @@ def get_key(client_id, payload, client_socket):
     encrypted_key = struct.pack(encrypted_key_headers, client_iv, encrypted_nonce, user_encrypted_key)
     ticket = struct.pack(ticket_headers, 24, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, current_time)
     data = struct.pack(data_headers, client_id ,encrypted_key, ticket)
-    print(data)
+    print(client_id, '\n', data)
 
     print('get key')
     client_socket.sendall(data)
@@ -155,14 +160,13 @@ def get_servers():
 
 
 
-def load_clients_id_list():
-    client_list = []
+def load_clients_name_list():
     try:
         with open(CLIENTS_FILE, 'r') as clients_file:
             clients = clients_file.readlines()
             for client in clients:
                 name = client.split(':')[1].strip()
-                client_list.append(name)
+                clients_name_list.append(name)
             clients_file.close
     except FileNotFoundError:
         with open(CLIENTS_FILE, 'w') as clients_file:
@@ -172,7 +176,25 @@ def load_clients_id_list():
     except Exception as e:
         print (e)
 
-    return client_list
+
+def load_clients_dict():
+    client_dict = {}
+    try:
+        with open(CLIENTS_FILE, 'r') as clients_file:
+            clients = clients_file.readlines()
+            for client in clients:
+                client_data = client.split(':')
+                client_id = client_data[0].strip()
+                password_hash = client_data[2].strip()
+                client_dict[client_id] = password_hash
+    except FileNotFoundError:
+        with open(CLIENTS_FILE, 'w') as clients_file:
+            clients_file.close()
+    except Exception as e:
+        print(e)
+
+    return client_dict
+
 
 
 
