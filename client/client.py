@@ -1,4 +1,5 @@
 import binascii
+import datetime
 import socket
 import struct
 import hashlib
@@ -14,12 +15,15 @@ file_path = os.path.join(current_directory, file_name)
 VERSION = 24
 HEADER_FORMAT = 'BHI'
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
+client_id = ''
 
 def main():
     try:
         with open(file_path, 'r') as file:
             name = file.readline()
-            client_id = file.readline()
+            global client_id
+            client_id_hex = file.readline()
+            client_id = binascii.unhexlify(client_id_hex)
     
 
     except FileNotFoundError:
@@ -31,16 +35,44 @@ def main():
         print(f'error: {e}')
 
 
-    data = request_key(client_id)
+    data = request_key()
     print(data)
 
     s = connect_to_msg_server()
-
-    chat(s, data, client_id)
+    send_key(s, data)
+    chat(s, data)
 
     #chat with massage server
         
 
+def send_key(s, data):
+    global client_id
+    authenticator = create_authenticator(data['key'])
+
+
+    payload_format = f'{len(authenticator)}s{len(data['ticket'])}s'
+    payload = struct.pack(payload_format, authenticator, data['ticket'])
+    
+    headers = struct.pack('16sBHI', client_id, VERSION, 1028, struct.calcsize(payload_format))
+
+    msg = struct.pack(f'{struct.calcsize('16sBHI')}s{struct.calcsize(payload_format)}s', headers, payload)
+    
+    s.sendall(msg)
+
+
+def create_authenticator(key):
+    global client_id
+    auth_headers = '16s16s16s16s8s'
+    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").encode()
+    cipher = AES.new(key, AES.MODE_CBC)
+    encrypted_version = cipher.encrypt(pad(str(VERSION).encode('utf-8'), AES.block_size))
+    encrypted_client_id = cipher.encrypt(client_id)
+    encrypted_server_id = cipher.encrypt(client_id)
+    encrypted_creation_time = cipher.encrypt(pad(current_time, AES.block_size))
+    iv = cipher.iv
+    authenticator = struct.pack(auth_headers, iv, encrypted_version, encrypted_client_id, encrypted_server_id, encrypted_creation_time)
+    
+    return authenticator
 
 def connect_to_msg_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -56,8 +88,8 @@ def connect_to_msg_server():
 
     print("connect_to_msg_server")
 
-def chat(s, dict_data, client_id):
-    print(client_id)
+def chat(s, dict_data):
+    global client_id
     print(dict_data['ticket'])
     s.sendall(dict_data['ticket'])
     print("chat")
@@ -96,11 +128,11 @@ def sign_up():
     password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
     password_hash_bytes = password_hash.encode('utf-8')
     name_bytes = name.encode('utf-8')  # Convert to bytes
-    client_id = get_random_bytes(16)
+    rand_client_id = get_random_bytes(16)
 
     payload_size = 255*2
 
-    data = struct.pack(f'16sBHI255s255s', client_id, VERSION, code, payload_size, name_bytes, password_hash_bytes)
+    data = struct.pack(f'16sBHI255s255s', rand_client_id, VERSION, code, payload_size, name_bytes, password_hash_bytes)
 
     s.sendall(data)
     s.listen
@@ -111,8 +143,8 @@ def sign_up():
 
     if(code == 1600):
         create_file()
+        global client_id
         client_id = struct.unpack('16s', server_answer[HEADER_SIZE:])[0]
-        print(str(client_id))
         client_id_hex = binascii.hexlify(client_id).decode()
         print('success')
 
@@ -132,7 +164,8 @@ def sign_up():
     
     return False
 
-def request_key(client_id):
+def request_key():
+    global client_id
     print('requesting key')
     print('client id = ', client_id)
 
@@ -145,7 +178,7 @@ def request_key(client_id):
     code = 1027
     nonce = get_random_bytes(8)
 
-    data = struct.pack(f'16sBHI16s8s', client_id.encode('utf-8'), VERSION, code, 24, mag_server_id, nonce)
+    data = struct.pack(f'16sBHI16s8s', client_id, VERSION, code, 24, mag_server_id, nonce)
     
     s.sendall(data)
     s.listen
@@ -167,6 +200,8 @@ def request_key(client_id):
         decrypted_nonce = cipher.decrypt(encrypted_nonce)
         try:
             decrypted_nonce = unpad(decrypted_nonce, AES.block_size)
+        except ValueError as ve:
+            continue
         except Exception as e:
             print(e)
 
