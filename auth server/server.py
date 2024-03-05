@@ -1,9 +1,7 @@
-import base64
 import binascii
 import hashlib
 import socket
 import struct
-import uuid
 from hashlib import sha256
 import datetime
 import os
@@ -23,15 +21,19 @@ HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 clients_name_list = []
 clients_dict = {}
 
+servers_name_list = []
+servers_dict = {}
+
 def main():
-    
-    clients_dict = load_clients_dict()
+
+    load_clients_dict()
+    load_servers_dict()
     load_clients_name_list()
     print(clients_name_list)
     port = read_server_port()
     msg_servers = load_message_server_details()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-        server_socket.bind((socket.gethostname(), port))
+        server_socket.bind(('127.0.0.1', port))
         server_socket.listen()
         print(f"Server listening on port {port}...")
         
@@ -59,13 +61,13 @@ def main():
                 case 1024:
                     user_sign_up(client_data[HEADER_SIZE:], client_socket)
                 case 1025:
-                    server_sign_up()
+                    server_sign_up(client_data[HEADER_SIZE:], client_socket)
                 case 1026:
-                    get_servers()
+                    get_servers(client_socket)
                 case 1027:
                     get_key(client_id, client_data[HEADER_SIZE:], client_socket)
 
-            client_socket.close
+            client_socket.close()
 
 
 
@@ -76,8 +78,6 @@ def user_sign_up(payload, client_socket):
     name, password_hash = struct.unpack(payload_format, payload)
     name = name.rstrip(b'\x00').decode('utf-8')
     password_hash = password_hash.rstrip(b'\x00').decode('utf-8')
-    print(password_hash, name)
-    print(f'name is {name} \n {clients_name_list}')
     if (name not in clients_name_list):
         try:
             with open(CLIENTS_FILE, 'a') as clients_file:
@@ -104,8 +104,32 @@ def user_sign_up(payload, client_socket):
     client_socket.sendall(data)
     
 
-def server_sign_up():
-    print('sign up')
+def server_sign_up(payload, socket):
+    ip, port = socket.getpeername()
+    payload_format = '255s32s'
+    name, aes_key = struct.unpack(payload_format, payload)
+    name = name.rstrip(b'\x00').decode('utf-8')
+    aes_key = aes_key.rstrip(b'\x00')
+    aes_key = b64encode(aes_key).decode()
+
+    try:
+        with open(MSG_SERVER_FILE, 'a') as servers_file:
+            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            id = get_random_bytes(16)
+            # while(id in clients_dict):
+            #     id = get_random_bytes(16)
+
+            id_hex = binascii.hexlify(id).decode()
+            servers_file.write(f'{ip}:{port}\n{name}\n{id_hex}\n{aes_key}\n')
+            response_code = 1600
+            data = struct.pack(f'BHI16s', VERSION, response_code, 16, id)
+            socket.sendall(data)
+            servers_dict[id] = {'name': name, 'ip': ip, 'port': port, 'key': aes_key}
+            print(servers_dict)
+            return
+
+    except Exception as e:
+        print(e)
 
 
 def get_key(client_id, payload, client_socket):
@@ -154,13 +178,33 @@ def get_key(client_id, payload, client_socket):
     return
 
 
-def get_servers():
+def get_servers(client_socket):
+    paload = b''
+    for server in servers_dict:
+        id = server
+        ip = socket.inet_aton(servers_dict[server]['ip'])
+        print("ip is: ",ip)
+        port = servers_dict[server]['port']
+        name = servers_dict[server]['name'].encode('utf-8')
+        temp = struct.pack('16s255s4sH', id, name, ip, port)
+        paload += temp
+
+    
+    answer_format = f'BHI{len(paload)}s'
+    answer = struct.pack(answer_format, VERSION, 1602, len(paload), paload)
+    
+    client_socket.sendall(answer)
+    
+
+
+    
     print('get servers list')
 
 
 
 
 def load_clients_name_list():
+    global clients_name_list
     try:
         with open(CLIENTS_FILE, 'r') as clients_file:
             clients = clients_file.readlines()
@@ -178,7 +222,7 @@ def load_clients_name_list():
 
 
 def load_clients_dict():
-    client_dict = {}
+    global client_dict
     try:
         with open(CLIENTS_FILE, 'r') as clients_file:
             clients = clients_file.readlines()
@@ -193,11 +237,30 @@ def load_clients_dict():
     except Exception as e:
         print(e)
 
-    return client_dict
+
+def load_servers_dict():
+
+    global servers_dict
+    try:
+        with open(MSG_SERVER_FILE, 'r') as servers_file:
+            lines = servers_file.readlines()
+            for i in range(0, len(lines), 4):
+                # Extract data for each server
+                ip_port = lines[i].strip().split(':')
+                ip = ip_port[0]
+                port = int(ip_port[1])
+                name = lines[i+1].strip()
+                server_id = lines[i+2].strip()
+                key = lines[i+3].strip()
+                server_id = binascii.unhexlify(server_id)
+                servers_dict[server_id] = {'name': name, 'ip': ip, 'port': port, 'key': key}
 
 
-
-
+    except FileNotFoundError:
+        with open(CLIENTS_FILE, 'w') as clients_file:
+            servers_file.close()
+    except Exception as e:
+        print(e)
 
 
 def read_server_port():
@@ -244,9 +307,6 @@ def load_message_server_details():
     except Exception as e:
         print(f"Failed to load msg.info: {e}")
         return None
-
-
-
 
 
 

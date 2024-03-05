@@ -4,6 +4,8 @@ import socket
 import struct
 import hashlib
 import os
+import msvcrt
+
 from Crypto.Random import get_random_bytes
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
@@ -17,7 +19,15 @@ HEADER_FORMAT = 'BHI'
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 client_id = ''
 
+AUTH_SERVER_IP = '127.0.0.1'
+MSG_SERVER_IP = '127.0.0.1'
+
+AUTH_SERVER_PORT = 1234
+MSG_SERVER_PORT = 1235
+
 def main():
+
+    read_srv_file()
     try:
         with open(file_path, 'r') as file:
             name = file.readline()
@@ -34,8 +44,10 @@ def main():
     except Exception as e:
         print(f'error: {e}')
 
-
-    data = request_key()
+    msg_server_dict = get_msg_servers()
+    print(msg_server_dict)
+    msg_server_id = select_msg_server(msg_server_dict)
+    data = request_key(msg_server_id)
     print(data)
 
     s = connect_to_msg_server()
@@ -44,6 +56,85 @@ def main():
 
     #chat with massage server
         
+
+def get_msg_servers():
+    s = connect_to_auth_server()
+    code = 1026
+    headers = struct.pack('16sBHI', client_id, VERSION, code, 0)
+    s.sendall(headers)
+
+    server_answer = b''
+
+    while True:
+        chunk = s.recv(1024)  # Adjust buffer size as needed
+        if not chunk:
+            break
+        server_answer += chunk
+    s.close()
+
+    version, code, payload_size = struct.unpack(HEADER_FORMAT, server_answer[:HEADER_SIZE])
+    payload = server_answer[HEADER_SIZE:]
+    num_of_servers = payload_size//278
+    print(payload_size)
+    print(num_of_servers)
+    servers_data = {}
+    for i in range(num_of_servers):
+        print(i)
+        try:
+            server_id, name, ip, port = struct.unpack('16s255s4sH', payload[i * 278:(i + 1) * 278])
+
+            # Convert bytes to string and remove trailing spaces
+            server_id = server_id.strip()
+            name = name.rstrip(b'\x00').decode()
+            ip = socket.inet_ntoa(ip)
+
+            # Add the server data to the new dictionary
+            servers_data[server_id] = {'name': name, 'ip': ip, 'port': port}
+
+        except struct.error as e:
+            print(f'Error unpacking data: {e}')
+    
+    return servers_data
+
+def select_msg_server(servers):
+    
+    options = []
+    reversed_dict = {}
+    for server in servers:
+        options.append(servers[server]['name'])
+        reversed_dict[servers[server]['name']] = server
+    
+    selected_index = 0
+    
+    while True:
+        print_menu(options, selected_index)
+
+        key = msvcrt.getch()
+
+        if key == b'\xe0':  # Arrow keys start with b'\xe0'
+            key = msvcrt.getch()
+            if key == b'H' and selected_index > 0:  # Up arrow
+                selected_index -= 1
+            elif key == b'P' and selected_index < len(options) - 1:  # Down arrow
+                selected_index += 1
+        elif key == b'\r':  # Enter key
+            print("You selected:", options[selected_index])
+            return reversed_dict[options[selected_index]]
+            break
+
+
+def print_menu(options, selected_index):
+    clear_screen()
+    for index, option in enumerate(options):
+        if index == selected_index:
+            print("[x]", option)
+        else:
+            print("[ ]", option)
+
+
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
 
 def send_key(s, data):
     global client_id
@@ -58,7 +149,6 @@ def send_key(s, data):
     msg = struct.pack(f'{struct.calcsize('16sBHI')}s{struct.calcsize(payload_format)}s', headers, payload)
     
     s.sendall(msg)
-
 
 def create_authenticator(key):
     global client_id
@@ -75,6 +165,7 @@ def create_authenticator(key):
     return authenticator
 
 def connect_to_msg_server():
+
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
@@ -98,7 +189,7 @@ def connect_to_auth_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
-        s.connect((socket.gethostname(), 1234))
+        s.connect((AUTH_SERVER_IP, AUTH_SERVER_PORT))
         return s
 
     except Exception as e:
@@ -109,7 +200,7 @@ def connect_to_auth_server():
 def create_file():
     print('creating file')
     f = open(file_path, 'w')
-    f.close
+    f.close()
 
 def sign_up():
     print('sign_up')
@@ -122,7 +213,7 @@ def sign_up():
 
     code = 1024  # Registration code
 
-    name = valid_input('Enter a name')
+    name = valid_input('Enter a name: ')
     password = valid_input("Enter password: ")
 
     password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
@@ -137,7 +228,7 @@ def sign_up():
     s.sendall(data)
     s.listen
     server_answer = s.recv(1024)
-    s.close
+    s.close()
 
     version, code, payload_size = struct.unpack(HEADER_FORMAT, server_answer[:HEADER_SIZE])
 
@@ -154,7 +245,7 @@ def sign_up():
                 client_info.write('\n')
                 client_info.write(client_id_hex)
                 print('asd')
-                client_info.close
+                client_info.close()
                 return True
             
         except Exception as e:
@@ -164,7 +255,7 @@ def sign_up():
     
     return False
 
-def request_key():
+def request_key(mag_server_id):
     global client_id
     print('requesting key')
     print('client id = ', client_id)
@@ -174,7 +265,6 @@ def request_key():
         print('did not manage to connect to server')
         return None
 
-    mag_server_id = b'64f3f63985f04beb81a0e43321880182'
     code = 1027
     nonce = get_random_bytes(8)
 
@@ -183,7 +273,7 @@ def request_key():
     s.sendall(data)
     s.listen
     server_answer = s.recv(1024)
-    s.close
+    s.close()
 
     encrypted_key_headers = '16s16s32s'
     ticket_headers = 'B16s16s8s16s32s8s'
@@ -222,7 +312,29 @@ def valid_input(str):
         user_input = input("please enter less then 255 characters").strip()
     return user_input
 
+def read_srv_file():
+    global AUTH_SERVER_IP
+    global MSG_SERVER_IP
+    global AUTH_SERVER_PORT
+    global MSG_SERVER_PORT
 
+    srv_path = os.path.join(current_directory, 'srv.info')
+    
+    try:
+        with open(srv_path, 'r') as file:
+            lines = file.readlines()
+            AUTH_SERVER_IP, AUTH_SERVER_PORT = lines[0].strip().split(':')
+            MSG_SERVER_IP, MSG_SERVER_PORT = lines[1].strip().split(':')
+
+            # Convert port numbers to integers
+            AUTH_SERVER_PORT = int(AUTH_SERVER_PORT)
+            MSG_SERVER_PORT = int(MSG_SERVER_PORT)
+
+    except FileNotFoundError:
+        print('File srv.info not found. Using default values.')
+
+    except Exception as e:
+        print(f'Error: {e}')
 
 
 
