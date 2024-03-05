@@ -15,7 +15,7 @@ DEFULT_PORT = 1256
 PORT_FILE = 'port.info'
 MSG_SERVER_FILE = 'msg.info'
 CLIENTS_FILE = 'clients'
-
+current_directory = os.path.dirname(os.path.abspath(__file__))
 HEADER_FORMAT = '16sBHI'
 HEADER_SIZE = struct.calcsize(HEADER_FORMAT)
 clients_name_list = []
@@ -111,9 +111,10 @@ def server_sign_up(payload, socket):
     name = name.rstrip(b'\x00').decode('utf-8')
     aes_key = aes_key.rstrip(b'\x00')
     aes_key = b64encode(aes_key).decode()
+    file_path = os.path.join(current_directory, file_name)
 
     try:
-        with open(MSG_SERVER_FILE, 'a') as servers_file:
+        with open(file_path, 'a') as servers_file:
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             id = get_random_bytes(16)
             # while(id in clients_dict):
@@ -241,8 +242,9 @@ def load_clients_dict():
 def load_servers_dict():
 
     global servers_dict
+    file_path = os.path.join(current_directory, MSG_SERVER_FILE)
     try:
-        with open(MSG_SERVER_FILE, 'r') as servers_file:
+        with open(file_path, 'r') as servers_file:
             lines = servers_file.readlines()
             for i in range(0, len(lines), 4):
                 # Extract data for each server
