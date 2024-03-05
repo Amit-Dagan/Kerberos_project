@@ -1,16 +1,24 @@
 @echo off
 
-set python_executable=C:\Users\User\AppData\Local\Programs\Python\Python312\python.exe
+rem Set the path to your Python installation (change if needed)
+set PYTHONPATH=C:\Users\User\AppData\Local\Programs\Python\Python312
 
-echo Starting authentication server...
-start "" /B %python_executable% "Kerberos_project\auth server\server.py"
-timeout /t 2 >nul
+rem Ensure Python is installed and accessible from the command line
+python --version
 
-echo Starting message server...
-start "" /B %python_executable% "Kerberos_project\msg server\msg new.py"
-timeout /t 2 >nul
 
-echo Starting client...
-start "" /B %python_executable% "Kerberos_project\client\client.py"
+rem Start the auth server in a new command window with a customized title
+start "Auth Server" cmd /k "%PYTHONPATH%\python auth server\server.py"
+
+rem Start the msg server in a new command window with a customized title
+start "Msg Server" cmd /k "%PYTHONPATH%\python msg_server.py"
+
+rem Wait for 5 seconds to allow the servers to fully initialize (adjust as needed)
+timeout /t 5 /nobreak
+
+rem Start the client in a new command window with a customized title
+start "Client" cmd /k "%PYTHONPATH%\python client\client.py"
+
+echo All scripts launched successfully!
 
 pause
