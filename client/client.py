@@ -45,14 +45,14 @@ def main():
         print(f'error: {e}')
 
     msg_server_dict = get_msg_servers()
-    print(msg_server_dict)
+    #print(msg_server_dict)
     msg_server_id = select_msg_server(msg_server_dict)
+    #print('server id = ', msg_server_id)
     data = request_key(msg_server_id)
     print(data)
 
-    s = connect_to_msg_server()
-    send_key(s, data)
-    chat(s, data)
+    send_key(data, msg_server_dict[msg_server_id])
+    chat()
 
     #chat with massage server
         
@@ -136,23 +136,28 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
-def send_key(s, data):
+def send_key(data, msg_server):
+    print(msg_server)
+    s = connect_to_msg_server(msg_server['ip'], msg_server['port'])
     global client_id
     authenticator = create_authenticator(data['key'])
 
 
     payload_format = f'{len(authenticator)}s{len(data['ticket'])}s'
     payload = struct.pack(payload_format, authenticator, data['ticket'])
-    
-    headers = struct.pack('16sBHI', client_id, VERSION, 1028, struct.calcsize(payload_format))
+    print('payload is = ', payload)
+    print('\n payload size is = ', len(payload))
+    print('\n heasers  is = ', payload_format)
+    print('\n heasers size is = ', struct.calcsize(payload_format))
 
-    msg = struct.pack(f'{struct.calcsize('16sBHI')}s{struct.calcsize(payload_format)}s', headers, payload)
-    
+    headers = struct.pack('16sBHI', client_id, VERSION, 1028, struct.calcsize(payload_format))
+    headers_size = struct.calcsize('16sBHI')
+    msg = struct.pack(f'{headers_size}s{struct.calcsize(payload_format)}s', headers, payload)
     s.sendall(msg)
 
 def create_authenticator(key):
     global client_id
-    auth_headers = '16s16s16s16s8s'
+    auth_headers = '16s16s16s16s16s'
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").encode()
     cipher = AES.new(key, AES.MODE_CBC)
     encrypted_version = cipher.encrypt(pad(str(VERSION).encode('utf-8'), AES.block_size))
@@ -164,12 +169,12 @@ def create_authenticator(key):
     
     return authenticator
 
-def connect_to_msg_server():
+def connect_to_msg_server(ip, port):
 
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     try:
-        s.connect(('127.0.0.1', 1235))
+        s.connect((ip, port))
         return s
 
     except Exception as e:
@@ -179,11 +184,10 @@ def connect_to_msg_server():
 
     print("connect_to_msg_server")
 
-def chat(s, dict_data):
-    global client_id
-    print(dict_data['ticket'])
-    s.sendall(dict_data['ticket'])
+def chat():
     print("chat")
+    input("enter a message")
+        
 
 def connect_to_auth_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -276,7 +280,7 @@ def request_key(mag_server_id):
     s.close()
 
     encrypted_key_headers = '16s16s32s'
-    ticket_headers = 'B16s16s8s16s32s8s'
+    ticket_headers = 'B16s16s8s16s32s32s'
     data_headers = f'16s{struct.calcsize(encrypted_key_headers)}s{struct.calcsize(ticket_headers)}s'
     client_id_returned , encrypted_key, ticket = struct.unpack(data_headers, server_answer)
 

@@ -7,7 +7,7 @@ import uuid
 from hashlib import sha256
 import datetime
 import os
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
@@ -62,7 +62,7 @@ def main():
             match code:
                 case 1028:
                     print('1028')
-                    #get_aes_key()
+                    get_aes_key(client_data[header_size:], client_socket)
                 case 1029:
                     print('1029')
                     #get_message
@@ -70,6 +70,47 @@ def main():
 
 
 
+def get_aes_key(data, socket):
+    print('data is = \n',data)
+    print('\ndata len is = \n',len(data))
+
+    auth_headers = '16s16s16s16s16s'
+    ticket_headers = 'B16s16s8s16s32s32s'
+    auth_size = struct.calcsize(auth_headers)
+    ticket_size = struct.calcsize(ticket_headers)
+    data_format = f'{auth_size}s{ticket_size}s'
+    print('data format is =', data_format)
+    auth, ticket = struct.unpack(data_format, data)
+    ticket_dict = dycrypt_ticket(ticket, ticket_headers)
+    auth_dict = dycrypt_auth(auth, auth_headers)
+
+
+def dycrypt_ticket(ticket, headers):
+
+    print('ticket len = ',len(ticket))
+    print('heasers len = ', struct.calcsize(headers))
+    version, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, expiration_time = struct.unpack(headers, ticket)
+    print('\n aes key = ', AES_KEY)
+    cipher = AES.new(AES_KEY, AES.MODE_CBC, ticket_iv)
+
+    ticket_dict  = {
+        'version': version,
+        'client id': client_id,
+        'msg server id': msg_server_id,
+        'current time': current_time,
+        'ticket iv': ticket_iv,
+        'encrypted key': cipher.decrypt(msg_encrypted_key),
+        'expiration time': cipher.decrypt(expiration_time)
+        }
+    print(ticket_dict)
+    return ticket_dict
+    
+
+
+    print('duyc ti')
+
+def dycrypt_auth(auth, headers):
+    print('dyc auth')
 
 def sign_up():
     print('sign_up')
@@ -99,7 +140,7 @@ def sign_up():
         global SERVER_ID
         global AES_KEY
         AES_KEY = aes_key
-        SERVER_ID = struct.unpack('16s', server_answer[HEADER_SIZE:])[0]
+        SERVER_ID = struct.unpack('16s', server_answer[header_size:])[0]
         server_id_hex = binascii.hexlify(SERVER_ID).decode()
         print('success')
         file_path = os.path.join(current_directory, 'msg.info')
@@ -156,7 +197,7 @@ def load_server_details(list):
     global SERVER_ID
     global AES_KEY
     SERVER_ID = list[3]
-    AES_KEY = list[4]
+    AES_KEY = b64decode(list[4].strip())
 
 def valid_input(str):
     

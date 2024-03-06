@@ -5,7 +5,7 @@ import struct
 from hashlib import sha256
 import datetime
 import os
-from base64 import b64encode
+from base64 import b64decode, b64encode
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Random import get_random_bytes
@@ -135,24 +135,21 @@ def server_sign_up(payload, socket):
 
 def get_key(client_id, payload, client_socket):
     
-
+    global servers_dict
     payload_format = '16s8s'
     msg_server_id, nonce = struct.unpack(payload_format, payload)
 
-    msg_server_key = get_random_bytes(32)
+    print(servers_dict, '\n')
+    print(msg_server_id, '\n')
+    msg_server_key = b64decode(servers_dict[msg_server_id]['key'])
     password_hash = hashlib.sha256('1234'.encode('utf-8')).digest()
     client_key = password_hash
     code = 1027
 
     encrypted_key_headers = '16s16s32s'
-    ticket_headers = 'B16s16s8s16s32s8s'
-    data_headers = f'16s{struct.calcsize(encrypted_key_headers)}s{struct.calcsize(ticket_headers)}s'
-
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").encode()
     aes_key = get_random_bytes(32)
-
-    print(data_headers)
 
     client_cipher = AES.new(client_key, AES.MODE_CBC)
     encrypted_nonce = client_cipher.encrypt(pad(nonce, AES.block_size))
@@ -169,7 +166,13 @@ def get_key(client_id, payload, client_socket):
     msg_encrypted_key = aes_key
 
     encrypted_key = struct.pack(encrypted_key_headers, client_iv, encrypted_nonce, user_encrypted_key)
-    ticket = struct.pack(ticket_headers, 24, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, current_time)
+    
+
+    ticket_headers = f'B16s16s8s16s{len(msg_encrypted_key)}s{len(expiration_time)}s'
+    print('ticket_headers = \n',ticket_headers, '\n')
+    ticket = struct.pack(ticket_headers, 24, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, expiration_time)
+    
+    data_headers = f'16s{struct.calcsize(encrypted_key_headers)}s{struct.calcsize(ticket_headers)}s'
     data = struct.pack(data_headers, client_id ,encrypted_key, ticket)
     print(client_id, '\n', data)
 
