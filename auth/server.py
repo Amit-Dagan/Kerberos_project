@@ -153,23 +153,19 @@ def get_key(client_id, payload, client_socket):
 
     client_cipher = AES.new(client_key, AES.MODE_CBC)
     encrypted_nonce = client_cipher.encrypt(pad(nonce, AES.block_size))
-    user_encrypted_key = client_cipher.encrypt(pad(aes_key, AES.block_size))
-    
-
+    user_encrypted_key = client_cipher.encrypt(aes_key)
     client_iv = client_cipher.iv
 
     msg_cipher = AES.new(msg_server_key, AES.MODE_CBC)
-    msg_encrypted_key = msg_cipher.encrypt(pad(aes_key, AES.block_size))
+    msg_encrypted_key = msg_cipher.encrypt(aes_key)
     expiration_time = msg_cipher.encrypt(pad(current_time, AES.block_size))
-
     ticket_iv = msg_cipher.iv
-    msg_encrypted_key = aes_key
 
     encrypted_key = struct.pack(encrypted_key_headers, client_iv, encrypted_nonce, user_encrypted_key)
     
 
     ticket_headers = f'B16s16s8s16s{len(msg_encrypted_key)}s{len(expiration_time)}s'
-    print('ticket_headers = \n',ticket_headers, '\n')
+    print(f'\naes key is : {aes_key}\n user encrypted key is: {user_encrypted_key}\n msg encrypted key is: {msg_encrypted_key}')
     ticket = struct.pack(ticket_headers, 24, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, expiration_time)
     
     data_headers = f'16s{struct.calcsize(encrypted_key_headers)}s{struct.calcsize(ticket_headers)}s'

@@ -22,9 +22,9 @@ NAME = ''
 VERSION = 24
 SERVER_ID = 0
 AES_KEY = 0
+clients_dict = {}
 
 def main():
-    print('main')
 
     srv_file_lines = read_srv_file() 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
@@ -41,12 +41,10 @@ def main():
         while True:
 
             client_socket, addr = server_socket.accept()
-            print(f"Connection from {addr}")
             client_data = client_socket.recv(1024) 
             header_format = '16sBHI'
             header_size = struct.calcsize(header_format)
             client_id, version, code, payload_size = struct.unpack(header_format, client_data[:header_size])
-            print('handeling id: ', client_id)
             if(version != VERSION):
                 #TODO check if works
                 continue
@@ -61,36 +59,75 @@ def main():
 
             match code:
                 case 1028:
-                    print('1028')
                     get_aes_key(client_data[header_size:], client_socket)
                 case 1029:
-                    print('1029')
-                    #get_message
+                    get_message(client_data[header_size:], client_socket, client_id)
     
 
 
+def get_message(data, socket, client_id):
+    global clients_dict
+    if client_id not in clients_dict:
+        send_error_to_client(socket)
+        return
+    
+    key = clients_dict[client_id]
+    msg_format = 'I16s'
+    msg_size, iv = struct.unpack(msg_format, data[:struct.calcsize(msg_format)])
+    encrypted_msg = struct.unpack(f'{msg_size}s', data[struct.calcsize(msg_format):])[0]  # Access the first element of the tuple
+    
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    msg = unpad(cipher.decrypt(encrypted_msg), AES.block_size)
+    msg = msg.decode('utf-8')
+    print(msg)
+    data = struct.pack(f'BHI', VERSION, 1605, 0)
+    socket.sendall(data)
+    socket.close()
+
 
 def get_aes_key(data, socket):
-    print('data is = \n',data)
-    print('\ndata len is = \n',len(data))
 
     auth_headers = '16s16s16s16s16s'
     ticket_headers = 'B16s16s8s16s32s32s'
     auth_size = struct.calcsize(auth_headers)
     ticket_size = struct.calcsize(ticket_headers)
     data_format = f'{auth_size}s{ticket_size}s'
-    print('data format is =', data_format)
     auth, ticket = struct.unpack(data_format, data)
     ticket_dict = dycrypt_ticket(ticket, ticket_headers)
-    auth_dict = dycrypt_auth(auth, auth_headers)
+    auth_dict = dycrypt_auth(auth, auth_headers, ticket_dict['key'])
 
+    if auth_dict['client id'] != ticket_dict['client id']:
+        #print('not the same client id')
+        send_error_to_client(socket)
+        return
+    
+    if not (auth_dict['version'] == ticket_dict['version'] == VERSION):
+        #print('not the same version')
+        send_error_to_client(socket)
+        return
+        
+    if not (auth_dict['msg server id'] == ticket_dict['msg server id'] == SERVER_ID) :
+        #print('not the same server id')
+        send_error_to_client(socket)
+        return
+    
+    global clients_dict
+    clients_dict[ticket_dict['client id']] = ticket_dict['key']
+    data = struct.pack(f'BHI', VERSION, 1604, 0)
+    socket.sendall(data)
+    socket.close()
+
+    return
+    
+        
+def send_error_to_client(socket):
+    data = struct.pack(f'BHI', VERSION, 1609, 0)
+    socket.sendall(data)
+    socket.close()
 
 def dycrypt_ticket(ticket, headers):
 
-    print('ticket len = ',len(ticket))
-    print('heasers len = ', struct.calcsize(headers))
     version, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, expiration_time = struct.unpack(headers, ticket)
-    print('\n aes key = ', AES_KEY)
     cipher = AES.new(AES_KEY, AES.MODE_CBC, ticket_iv)
 
     ticket_dict  = {
@@ -99,25 +136,30 @@ def dycrypt_ticket(ticket, headers):
         'msg server id': msg_server_id,
         'current time': current_time,
         'ticket iv': ticket_iv,
-        'encrypted key': cipher.decrypt(msg_encrypted_key),
-        'expiration time': cipher.decrypt(expiration_time)
+        'key': cipher.decrypt(msg_encrypted_key),
+        'expiration time': unpad(cipher.decrypt(expiration_time), AES.block_size)
         }
-    print(ticket_dict)
     return ticket_dict
     
+    
+def dycrypt_auth(auth, headers, key):
+    auth_iv, version, client_id, msg_server_id, creation_time = struct.unpack(headers, auth)
+    cipher = AES.new(key, AES.MODE_CBC, auth_iv)
 
+    auth_dict = {
+        'version': int(unpad(cipher.decrypt(version), AES.block_size)),
+        'client id': cipher.decrypt(client_id),
+        'msg server id': cipher.decrypt(msg_server_id),
+        'creation time': cipher.decrypt(creation_time)
+    }
+    return auth_dict
 
-    print('duyc ti')
-
-def dycrypt_auth(auth, headers):
-    print('dyc auth')
 
 def sign_up():
-    print('sign_up')
     s = connect_to_auth_server()
     
     if(s == None):
-        print('did now manage to connect to server')
+        #print('did not manage to connect to server')
         return None
 
     code = 1025  # MSG Server registration code
@@ -142,7 +184,6 @@ def sign_up():
         AES_KEY = aes_key
         SERVER_ID = struct.unpack('16s', server_answer[header_size:])[0]
         server_id_hex = binascii.hexlify(SERVER_ID).decode()
-        print('success')
         file_path = os.path.join(current_directory, 'msg.info')
 
         try:
@@ -167,7 +208,6 @@ def read_srv_file():
     try:
         with open(msg_path, 'r') as file:
             lines = file.readlines()
-            print(lines)
             AUTH_SERVER_IP, AUTH_SERVER_PORT = lines[0].strip().split(':')
             IP, PORT = lines[1].strip().split(':')
 
@@ -196,7 +236,7 @@ def connect_to_auth_server(s):
 def load_server_details(list):
     global SERVER_ID
     global AES_KEY
-    SERVER_ID = list[3]
+    SERVER_ID = binascii.unhexlify(list[3].strip())
     AES_KEY = b64decode(list[4].strip())
 
 def valid_input(str):

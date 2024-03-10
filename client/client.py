@@ -38,6 +38,7 @@ def main():
 
     except FileNotFoundError:
         while (not sign_up()): 
+            clear_screen()
             print('try again')
         
 
@@ -45,16 +46,14 @@ def main():
         print(f'error: {e}')
 
     msg_server_dict = get_msg_servers()
-    #print(msg_server_dict)
     msg_server_id = select_msg_server(msg_server_dict)
-    #print('server id = ', msg_server_id)
     data = request_key(msg_server_id)
-    print(data)
 
-    send_key(data, msg_server_dict[msg_server_id])
-    chat()
-
-    #chat with massage server
+    key_sent = send_key(data, msg_server_dict[msg_server_id], msg_server_id)
+    if (key_sent):
+        chat(data['key'], msg_server_dict[msg_server_id])
+    else:
+        print('Error in sending key to message server.\nPlease try again.')
         
 
 def get_msg_servers():
@@ -75,11 +74,8 @@ def get_msg_servers():
     version, code, payload_size = struct.unpack(HEADER_FORMAT, server_answer[:HEADER_SIZE])
     payload = server_answer[HEADER_SIZE:]
     num_of_servers = payload_size//278
-    print(payload_size)
-    print(num_of_servers)
     servers_data = {}
     for i in range(num_of_servers):
-        print(i)
         try:
             server_id, name, ip, port = struct.unpack('16s255s4sH', payload[i * 278:(i + 1) * 278])
 
@@ -122,7 +118,6 @@ def select_msg_server(servers):
             return reversed_dict[options[selected_index]]
             break
 
-
 def print_menu(options, selected_index):
     clear_screen()
     for index, option in enumerate(options):
@@ -131,38 +126,41 @@ def print_menu(options, selected_index):
         else:
             print("[ ]", option)
 
-
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
-
-def send_key(data, msg_server):
-    print(msg_server)
-    s = connect_to_msg_server(msg_server['ip'], msg_server['port'])
+def send_key(data, msg_server, msg_server_id):
     global client_id
-    authenticator = create_authenticator(data['key'])
 
+    s = connect_to_msg_server(msg_server['ip'], msg_server['port'])
+    authenticator = create_authenticator(data['key'], msg_server_id)
 
     payload_format = f'{len(authenticator)}s{len(data['ticket'])}s'
     payload = struct.pack(payload_format, authenticator, data['ticket'])
-    print('payload is = ', payload)
-    print('\n payload size is = ', len(payload))
-    print('\n heasers  is = ', payload_format)
-    print('\n heasers size is = ', struct.calcsize(payload_format))
 
     headers = struct.pack('16sBHI', client_id, VERSION, 1028, struct.calcsize(payload_format))
     headers_size = struct.calcsize('16sBHI')
     msg = struct.pack(f'{headers_size}s{struct.calcsize(payload_format)}s', headers, payload)
     s.sendall(msg)
+    server_answer = s.recv(1024)
+    s.close()
 
-def create_authenticator(key):
+    version, code, payload_size = struct.unpack(HEADER_FORMAT, server_answer[:HEADER_SIZE])
+    if code == 1604:
+        return True
+    return False
+
+
+
+
+def create_authenticator(key, msg_server_id):
     global client_id
     auth_headers = '16s16s16s16s16s'
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").encode()
     cipher = AES.new(key, AES.MODE_CBC)
     encrypted_version = cipher.encrypt(pad(str(VERSION).encode('utf-8'), AES.block_size))
     encrypted_client_id = cipher.encrypt(client_id)
-    encrypted_server_id = cipher.encrypt(client_id)
+    encrypted_server_id = cipher.encrypt(msg_server_id)
     encrypted_creation_time = cipher.encrypt(pad(current_time, AES.block_size))
     iv = cipher.iv
     authenticator = struct.pack(auth_headers, iv, encrypted_version, encrypted_client_id, encrypted_server_id, encrypted_creation_time)
@@ -184,10 +182,36 @@ def connect_to_msg_server(ip, port):
 
     print("connect_to_msg_server")
 
-def chat():
-    print("chat")
-    input("enter a message")
-        
+def chat(key, msg_server):
+    global client_id
+
+    s = connect_to_msg_server(msg_server['ip'], msg_server['port'])
+    cipher = AES.new(key, AES.MODE_CBC)
+
+    msg = input("enter youe message: ")
+    msg = msg.encode('utf-8')
+
+    encrypted_msg = cipher.encrypt(pad(msg, AES.block_size))
+
+    print("encrypted_msg = \n", encrypted_msg)
+
+    iv = cipher.iv
+    payload_format = f'I16s{len(encrypted_msg)}s'
+    payload = struct.pack(payload_format, len(encrypted_msg), iv, encrypted_msg)
+    headers = struct.pack('16sBHI', client_id, VERSION, 1029, struct.calcsize(payload_format))
+    data_format = f'{struct.calcsize('16sBHI')}s{struct.calcsize(payload_format)}s'
+    data = struct.pack(data_format, headers, payload)
+
+    s.sendall(data)
+    
+    server_answer = s.recv(1024)
+    s.close()
+
+    version, code, payload_size = struct.unpack(HEADER_FORMAT, server_answer)
+    if code == 1605:
+        return True
+    return False
+
 
 def connect_to_auth_server():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -207,7 +231,6 @@ def create_file():
     f.close()
 
 def sign_up():
-    print('sign_up')
     
     s = connect_to_auth_server()
     
@@ -248,7 +271,6 @@ def sign_up():
                 client_info.write(name)
                 client_info.write('\n')
                 client_info.write(client_id_hex)
-                print('asd')
                 client_info.close()
                 return True
             
@@ -262,7 +284,6 @@ def sign_up():
 def request_key(mag_server_id):
     global client_id
     print('requesting key')
-    print('client id = ', client_id)
 
     s = connect_to_auth_server()
     if(s == None):
