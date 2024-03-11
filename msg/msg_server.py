@@ -1,9 +1,7 @@
-import base64
 import binascii
-import hashlib
 import socket
 import struct
-import uuid
+import threading
 from hashlib import sha256
 import datetime
 import os
@@ -41,28 +39,31 @@ def main():
         while True:
 
             client_socket, addr = server_socket.accept()
-            client_data = client_socket.recv(1024) 
-            header_format = '16sBHI'
-            header_size = struct.calcsize(header_format)
-            client_id, version, code, payload_size = struct.unpack(header_format, client_data[:header_size])
-            if(version != VERSION):
-                #TODO check if works
-                continue
+            thread = threading.Thread(target=handle_client, args=(client_socket,))
+            thread.start()
 
-            if(len(client_data[header_size:]) != payload_size):
-                print(f"len of client_data[HEADER_SIZE:] = {len(client_data[header_size:])} ")
-                print(f"len of payload_size = {payload_size}")
-                print('not the same size')
-                #TODO check if works
-                continue
+def handle_client(client_socket):
+    client_data = client_socket.recv(1024) 
+    header_format = '16sBHI'
+    header_size = struct.calcsize(header_format)
+    client_id, version, code, payload_size = struct.unpack(header_format, client_data[:header_size])
+    if(version != VERSION):
+        #TODO check if works
+        print('error')
 
+    elif(len(client_data[header_size:]) != payload_size):
+        print(f"len of client_data[HEADER_SIZE:] = {len(client_data[header_size:])} ")
+        print(f"len of payload_size = {payload_size}")
+        print('not the same size')
+        #TODO check if works
+        
 
-            match code:
-                case 1028:
-                    get_aes_key(client_data[header_size:], client_socket)
-                case 1029:
-                    get_message(client_data[header_size:], client_socket, client_id)
-    
+    else:
+        match code:
+            case 1028:
+                get_aes_key(client_data[header_size:], client_socket)
+            case 1029:
+                get_message(client_data[header_size:], client_socket, client_id)
 
 
 def get_message(data, socket, client_id):
@@ -77,13 +78,19 @@ def get_message(data, socket, client_id):
     encrypted_msg = struct.unpack(f'{msg_size}s', data[struct.calcsize(msg_format):])[0]  # Access the first element of the tuple
     
     cipher = AES.new(key, AES.MODE_CBC, iv)
-    msg = unpad(cipher.decrypt(encrypted_msg), AES.block_size)
-    msg = msg.decode('utf-8')
+    msg = cipher.decrypt(encrypted_msg)
+    
+    try:    
+        msg = unpad(msg, AES.block_size)
+        msg = msg.decode('utf-8')
+    except Exception as e:
+        print('no need padd')
+
+    
     print(msg)
     data = struct.pack(f'BHI', VERSION, 1605, 0)
     socket.sendall(data)
-    socket.close()
-
+    handle_client(socket)
 
 def get_aes_key(data, socket):
 

@@ -186,31 +186,31 @@ def chat(key, msg_server):
     global client_id
 
     s = connect_to_msg_server(msg_server['ip'], msg_server['port'])
-    cipher = AES.new(key, AES.MODE_CBC)
+    code = 1605
+    while(code == 1605):
+        cipher = AES.new(key, AES.MODE_CBC)
+        msg = input("enter youe message: ")
+        msg = msg.encode('utf-8')
 
-    msg = input("enter youe message: ")
-    msg = msg.encode('utf-8')
+        encrypted_msg = cipher.encrypt(pad(msg, AES.block_size))
 
-    encrypted_msg = cipher.encrypt(pad(msg, AES.block_size))
+        print("encrypted_msg = \n", encrypted_msg)
 
-    print("encrypted_msg = \n", encrypted_msg)
+        iv = cipher.iv
+        payload_format = f'I16s{len(encrypted_msg)}s'
+        payload = struct.pack(payload_format, len(encrypted_msg), iv, encrypted_msg)
+        headers = struct.pack('16sBHI', client_id, VERSION, 1029, struct.calcsize(payload_format))
+        data_format = f'{struct.calcsize('16sBHI')}s{struct.calcsize(payload_format)}s'
+        data = struct.pack(data_format, headers, payload)
 
-    iv = cipher.iv
-    payload_format = f'I16s{len(encrypted_msg)}s'
-    payload = struct.pack(payload_format, len(encrypted_msg), iv, encrypted_msg)
-    headers = struct.pack('16sBHI', client_id, VERSION, 1029, struct.calcsize(payload_format))
-    data_format = f'{struct.calcsize('16sBHI')}s{struct.calcsize(payload_format)}s'
-    data = struct.pack(data_format, headers, payload)
+        s.sendall(data)
+        
+        server_answer = s.recv(1024)
+        version, code, payload_size = struct.unpack(HEADER_FORMAT, server_answer)
 
-    s.sendall(data)
-    
-    server_answer = s.recv(1024)
+
     s.close()
 
-    version, code, payload_size = struct.unpack(HEADER_FORMAT, server_answer)
-    if code == 1605:
-        return True
-    return False
 
 
 def connect_to_auth_server():
@@ -243,14 +243,13 @@ def sign_up():
     name = valid_input('Enter a name: ')
     password = valid_input("Enter password: ")
 
-    password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
-    password_hash_bytes = password_hash.encode('utf-8')
+    password_hash = hashlib.sha256(password.encode('utf-8')).digest()
     name_bytes = name.encode('utf-8')  # Convert to bytes
     rand_client_id = get_random_bytes(16)
 
     payload_size = 255*2
 
-    data = struct.pack(f'16sBHI255s255s', rand_client_id, VERSION, code, payload_size, name_bytes, password_hash_bytes)
+    data = struct.pack(f'16sBHI255s255s', rand_client_id, VERSION, code, payload_size, name_bytes, password_hash)
 
     s.sendall(data)
     s.listen
@@ -294,7 +293,7 @@ def request_key(mag_server_id):
     nonce = get_random_bytes(8)
 
     data = struct.pack(f'16sBHI16s8s', client_id, VERSION, code, 24, mag_server_id, nonce)
-    
+    print('data = \n',data,'\n')
     s.sendall(data)
     s.listen
     server_answer = s.recv(1024)
