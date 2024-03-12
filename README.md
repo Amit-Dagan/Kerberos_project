@@ -1,5 +1,3 @@
-I'd be glad to create a README file for your Kerberos implementation, incorporating the strengths of both Response A and Response B while addressing their shortcomings and leveraging insights from the ratings:
-
 **Kerberos Implementation**
 
 This project implements the Kerberos authentication protocol, providing secure communication between clients, an authentication server, and message servers. Here's an overview of the key components:
