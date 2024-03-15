@@ -184,7 +184,7 @@ def connect_to_msg_server(ip, port):
 
 def chat(key, msg_server):
     global client_id
-
+    clear_screen()
     s = connect_to_msg_server(msg_server['ip'], msg_server['port'])
     code = 1605
     while(code == 1605):
@@ -193,8 +193,6 @@ def chat(key, msg_server):
         msg = msg.encode('utf-8')
 
         encrypted_msg = cipher.encrypt(pad(msg, AES.block_size))
-
-        print("encrypted_msg = \n", encrypted_msg)
 
         iv = cipher.iv
         payload_format = f'I16s{len(encrypted_msg)}s'
@@ -325,6 +323,8 @@ def request_key(mag_server_id):
     decrypted_aes_key = cipher.decrypt(encrypted_aes_key)
     try:
         decrypted_aes_key = unpad(decrypted_aes_key, AES.block_size)
+    except ValueError as ve:
+        pass
     except Exception as e:
         print(e)
     return {'ticket': ticket, 'key': decrypted_aes_key}

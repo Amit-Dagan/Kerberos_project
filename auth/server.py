@@ -1,5 +1,4 @@
 import binascii
-import hashlib
 import socket
 import struct
 import datetime
@@ -32,7 +31,6 @@ def main():
     load_clients_name_list()
     print(clients_name_list)
     port = read_server_port()
-    msg_servers = load_message_server_details()
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
         server_socket.bind(('127.0.0.1', port))
         server_socket.listen()
@@ -162,8 +160,8 @@ def get_key(client_id, payload, client_socket):
     encrypted_key_headers = '16s16s32s'
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").encode()
-    expiration_time = current_time + datetime.timedelta(days=1)
-
+    expiration_time = datetime.datetime.now() + datetime.timedelta(days=1)
+    expiration_time = expiration_time.strftime("%Y-%m-%d %H:%M:%S").encode()
     aes_key = get_random_bytes(32)
 
     client_cipher = AES.new(client_key, AES.MODE_CBC)
@@ -179,7 +177,8 @@ def get_key(client_id, payload, client_socket):
     encrypted_key = struct.pack(encrypted_key_headers, client_iv, encrypted_nonce, user_encrypted_key)
     
 
-    ticket_headers = f'B16s16s8s16s{len(msg_encrypted_key)}s{len(expiration_time)}s'
+    ticket_headers = f'B16s16s8s16s{len(msg_encrypted_key)}s{len(encrypted_expiration_time)}s'
+    print('ticket_headers: ', ticket_headers)
     ticket = struct.pack(ticket_headers, 24, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, encrypted_expiration_time)
     
     data_headers = f'16s{struct.calcsize(encrypted_key_headers)}s{struct.calcsize(ticket_headers)}s'
@@ -228,7 +227,6 @@ def load_clients_name_list():
 
 def load_clients_dict():
     global clients_dict
-    print('helooooooooooo')
     file_path = os.path.join(current_directory, CLIENTS_FILE)
     try:
         with open(file_path, 'r') as clients_file:
