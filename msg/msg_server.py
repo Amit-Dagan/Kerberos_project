@@ -118,6 +118,12 @@ def get_aes_key(data, socket):
         send_error_to_client(socket)
         return
     
+    if not (datetime.datetime.now() > ticket_dict['expiration time']) :
+        #print('not the same server id')
+        send_error_to_client(socket)
+        return
+    
+    
     global clients_dict
     clients_dict[ticket_dict['client id']] = ticket_dict['key']
     data = struct.pack(f'BHI', VERSION, 1604, 0)

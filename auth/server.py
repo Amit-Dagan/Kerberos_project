@@ -130,22 +130,21 @@ def server_sign_up(payload, socket):
     file_path = os.path.join(current_directory, MSG_SERVER_FILE)
 
     try:
-        with open(file_path, 'a') as servers_file:
-            current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        file_lock = threading.Lock() 
+        id = get_random_bytes(16)
+        while(id in servers_dict):
             id = get_random_bytes(16)
-            # while(id in clients_dict):
-            #     id = get_random_bytes(16)
-
-            id_hex = binascii.hexlify(id).decode()
-            servers_file.write(f'{ip}:{port}\n{name}\n{id_hex}\n{aes_key}\n')
-            response_code = 1600
-            data = struct.pack(f'BHI16s', VERSION, response_code, 16, id)
-            socket.sendall(data)
-            servers_dict[id] = {'name': name, 'ip': ip, 'port': port, 'key': aes_key}
-            return
-
+        id_hex = binascii.hexlify(id).decode()
+        with file_lock:           
+            with open(file_path, 'a') as servers_file:
+                servers_file.write(f'{ip}:{port}\n{name}\n{id_hex}\n{aes_key}\n')
+                servers_dict[id] = {'name': name, 'ip': ip, 'port': port, 'key': aes_key}
+        response_code = 1600
+        data = struct.pack(f'BHI16s', VERSION, response_code, 16, id)
+        socket.sendall(data)
     except Exception as e:
         print(e)
+
 
 
 def get_key(client_id, payload, client_socket):
@@ -163,6 +162,8 @@ def get_key(client_id, payload, client_socket):
     encrypted_key_headers = '16s16s32s'
 
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").encode()
+    expiration_time = current_time + datetime.timedelta(days=1)
+
     aes_key = get_random_bytes(32)
 
     client_cipher = AES.new(client_key, AES.MODE_CBC)
@@ -172,14 +173,14 @@ def get_key(client_id, payload, client_socket):
 
     msg_cipher = AES.new(msg_server_key, AES.MODE_CBC)
     msg_encrypted_key = msg_cipher.encrypt(aes_key)
-    expiration_time = msg_cipher.encrypt(pad(current_time, AES.block_size))
+    encrypted_expiration_time = msg_cipher.encrypt(pad(expiration_time, AES.block_size))
     ticket_iv = msg_cipher.iv
 
     encrypted_key = struct.pack(encrypted_key_headers, client_iv, encrypted_nonce, user_encrypted_key)
     
 
     ticket_headers = f'B16s16s8s16s{len(msg_encrypted_key)}s{len(expiration_time)}s'
-    ticket = struct.pack(ticket_headers, 24, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, expiration_time)
+    ticket = struct.pack(ticket_headers, 24, client_id, msg_server_id, current_time, ticket_iv, msg_encrypted_key, encrypted_expiration_time)
     
     data_headers = f'16s{struct.calcsize(encrypted_key_headers)}s{struct.calcsize(ticket_headers)}s'
     data = struct.pack(data_headers, client_id ,encrypted_key, ticket)
@@ -205,13 +206,6 @@ def get_servers(client_socket):
     
     client_socket.sendall(answer)
     
-
-
-    
-    print('get servers list')
-
-
-
 
 def load_clients_name_list():
     global clients_name_list
