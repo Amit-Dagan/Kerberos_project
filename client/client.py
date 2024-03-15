@@ -291,7 +291,6 @@ def request_key(mag_server_id):
     nonce = get_random_bytes(8)
 
     data = struct.pack(f'16sBHI16s8s', client_id, VERSION, code, 24, mag_server_id, nonce)
-    print('data = \n',data,'\n')
     s.sendall(data)
     s.listen
     server_answer = s.recv(1024)
