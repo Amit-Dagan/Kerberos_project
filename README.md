@@ -13,7 +13,7 @@ The project simulates the Kerberos authentication mechanism allowing clients to 
 2. **MSG Server (Message Service Server)**: A service that clients can communicate with after obtaining a valid ticket from the Auth Server.
 3. **Client**: The client application that registers with the Auth Server, requests tickets for services, and communicates with the MSF Server using the tickets.
 4. **Dictionary Attack Script**: A demonstration of how a dictionary attack could be performed against the protocol implementation to uncover user passwords.
-5. **run.bat**: A simple tool to automaticly run the servers ans the client 
+5. **run.bat**: A simple tool to automaticly run the servers and the client 
 
 
 ## Requirements
